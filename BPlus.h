@@ -1,22 +1,22 @@
 //
-// Created by iansg on 2/8/2024.
+// Created by iansg on 2/7/2024.
 //
 
-#ifndef AED_TRIEB_BTREE_H
-#define AED_TRIEB_BTREE_H
+#ifndef ADS_BTREE_BTREE_H
+#define ADS_BTREE_BTREE_H
 
 #include <iostream>
 #include <functional>
 using namespace std;
 
 template<typename T>
-class BTree {
+class BPlus {
     class Node {
         int n {}; // number of keys
-        T* key {}; // array of keys
+        T** key {}; // array of keys
         Node** c {}; // array of pointers to children
         bool leaf {}; // boolean, true if it is a leaf
-        friend BTree;
+        friend BPlus;
 
     public:
         Node() : leaf(true) {}
@@ -25,14 +25,19 @@ class BTree {
             n = 0;
             leaf = true;
 
-            key = new T[m - 1];
+            key = new T*[m - 1];
+            for (int i = 1; i < m; ++i)
+                key[i - 1] = nullptr;
 
             c = new Node*[m];
             for (int i = 0; i < m; ++i)
                 c[i] = nullptr;
         }
         ~Node() {
-            delete key;
+            for (int i = 0; i < (n<<1) - 1; ++i)
+                delete key[i];
+            delete[] key;
+
             for (int i = 0; i < (n<<1); ++i)
                 delete c[i];
             delete[] c;
@@ -42,7 +47,7 @@ class BTree {
     void create_root(T k) {
         root = new Node(t);
         root->n = 1;
-        root->key[0] = k;
+        root->key[0] = new T(k);
     }
 
     void split_root() {
@@ -85,13 +90,13 @@ class BTree {
     void insert_non_full(Node* x, T k) {
         int i = 0;
         for (; i < x->n; ++i)
-            if (k <= x->key[i]) break;
+            if (k <= *x->key[i]) break;
 
-        if (i < x->n && x->key[i] == k) return;
+        if (i < x->n && *x->key[i] == k) return;
         if (x->leaf) {
             for (int j = i + 1; j <= x->n; ++j)
                 x->key[j] = x->key[j - 1];
-            x->key[i] = k;
+            x->key[i] = new T(k);
             x->n += 1;
             return;
         }
@@ -103,12 +108,12 @@ class BTree {
         return insert_non_full(x->c[i], k);
     }
 
-    int predecessor(Node* x) {
+    T* predecessor(Node* x) {
         if (x->leaf) return x->key[x->n - 1];
         return predecessor(x->c[x->n]);
     }
 
-    int successor(Node* x) {
+    T* successor(Node* x) {
         if (x->leaf) return x->key[0];
         return successor(x->c[0]);
     }
@@ -122,12 +127,12 @@ class BTree {
 
     void erase_2a(Node* x, int i) {
         x->key[i] = predecessor(x->c[i]);
-        erase(x->c[i], x->key[i]);
+        erase(x->c[i], *x->key[i]);
     }
 
     void erase_2b(Node* x, int i) {
         x->key[i] = successor(x->c[i + 1]);
-        erase(x->c[i + 1], x->key[i]);
+        erase(x->c[i + 1], *x->key[i]);
     }
 
     void erase_2c(Node* x, int i) {
@@ -139,26 +144,26 @@ class BTree {
         for (int j = 0; j < t - 1; ++j) // merge keys in y
             y->key[j + t] = z->key[j];
         for (int j = 0; j < t; ++j) // merge children in y
-            y->c[j + t] = z->c[j]; // CRAZY ERROR for using y[j + t]
+            y->c[j + t] = z->c[j];
 
         for (int j = i + 1; j < x->n; ++j) // shift left keys in x
             x->key[j - 1] = x->key[j];
         for (int j = i + 1; j < x->n; ++j) // shift left children in x
             x->c[j] = x->c[j + 1];
 
-
         x->c[x->n] = nullptr;
         x->n -= 1; // reduce x's key count
 
+        z->n = 0;
         delete z;
 
-        erase(x->c[i], y->key[t - 1]);
+        erase(x->c[i], *y->key[t - 1]);
     }
 
     void erase_2(Node* x, int i) {
-        if (x->c[i]->n >= t) return erase_2a(x, i);
-        if (x->c[i+1]->n >= t) return erase_2b(x, i);
-        return erase_2c(x, i);
+        if (i > 0 && x->c[i - 1]->n >= t) return erase_2a(x, i);
+        else if (i < (t<<1) - 2 && x->c[i + 1]->n >= t) return erase_2b(x, i);
+        else erase_2c(x, i);
     }
 
     void erase_3a(Node* x, int i, T k) {
@@ -220,6 +225,7 @@ class BTree {
                 x->c[j - 1] = x->c[j];
             x->n -= 1;
 
+            z->n = 0;
             delete z;
 
             erase(x->c[i - 1], k);
@@ -243,6 +249,7 @@ class BTree {
                 x->c[j - 1] = x->c[j];
             x->n -= 1;
 
+            z->n = 0;
             delete z;
 
             erase(x->c[i], k);
@@ -250,32 +257,32 @@ class BTree {
     }
 
     void erase_3(Node* x, int i, T k) {
-        if ((i > 0 && x->c[i - 1] >= t) || (i < (t<<1) - 2 && x->c[i + 1] >= t)) return erase_3a(x, i, k);
+        if ((i > 0 && x->c[i - 1]->n >= t) || (i < (t<<1) - 2 && x->c[i + 1]->n >= t)) return erase_3a(x, i, k);
         return erase_3b(x, i, k);
     }
 
     void erase(Node* x, T k) {
         int i = 0;
         for (; i < x->n; ++i)
-            if (k <= x->key[i]) break;
-        if (i < x->n && x->key[i] == k) {
+            if (k <= *x->key[i]) break;
+
+        if (i < x->n && *x->key[i] == k) {
             if (x->leaf) return erase_1(x, i);
-            else if (i > 0 && x->c[i - 1]->n >= t) return erase_2a(x, i);
-            else if (i < (t<<1) - 2 && x->c[i + 1]->n >= t) return erase_2b(x, i);
-            else erase_2c(x, i);
+            return erase_2(x, i);
         }
+
         if (x->leaf) return;
+
         if (x->c[i]->n >= t) return erase(x->c[i], k);
-        if ((i > 0 && x->c[i - 1]->n >= t) || (i < (t<<1) - 2 && x->c[i + 1]->n >= t)) return erase_3a(x, i, k);
-        return erase_3b(x, i, k);
+        return erase_3(x, i, k);
     }
 
     bool search(Node* x, T k) {
         int i = 0;
         for (; i < x->n; ++i)
-            if (k <= x->key[i]) break;
+            if (k <= *x->key[i]) break;
 
-        if (i < x->n && x->key[i] == k) return true;
+        if (i < x->n && *x->key[i] == k) return true;
         if (x->leaf) return false;
         return search(x->c[i], k);
     }
@@ -286,8 +293,7 @@ class BTree {
         int i = 0;
         for (; i < x->n; ++i) {
             traverse(x->c[i], process);
-            process(x->key[i]);
-//            cout << x->n << ' ' << x->key[i] << ' ';
+            process(*x->key[i]);
         }
         if (!x->leaf) traverse(x->c[i], process);
     }
@@ -296,8 +302,8 @@ class BTree {
     Node* root {};
 
 public:
-    explicit BTree(int t) : t(t) {}
-    ~BTree() { clear(); }
+    explicit BPlus(int t) : t(t) {}
+    ~BPlus() { clear(); }
     void clear() {}
     void insert(T k) {
         if (root == nullptr) return create_root(k);
@@ -307,8 +313,11 @@ public:
     void erase(T k) {
         if (root == nullptr) return;
         erase(root, k);
-        if (root->n == 0)
+        if (root->n == 0) {
+            Node* temp = root;
             root = (root->leaf ? nullptr : root->c[0]);
+            delete temp;
+        }
     }
     bool search(T k) {
         if (root == nullptr) return false;
@@ -320,4 +329,4 @@ public:
     }
 };
 
-#endif //AED_TRIEB_BTREE_H
+#endif //ADS_BTREE_BTREE_H

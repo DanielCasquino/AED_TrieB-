@@ -1,6 +1,6 @@
 #include <iostream>
 #include "Trie.h"
-#include "BTree.h"
+#include "BPlus.h"
 #include <cassert>
 using namespace std;
 
@@ -32,9 +32,9 @@ void test_erase() {
     assert(trie.search("a") == false);
 }
 
-// BTree
+// BPlus
 void test() {
-    BTree<char> bt (3);
+    BPlus<char> bt (3);
     bt.insert('b');
     bt.insert('a');
     bt.insert('c');
